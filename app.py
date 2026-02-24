@@ -228,7 +228,8 @@ if show_allocated:
         x=filtered["Date"],
         y=filtered["allocated_inventory"],
         name="Allocated Inventory",
-        mode="lines"
+        mode="lines",
+        line=dict(dash="dash")
     ))
 
 if show_loss:
@@ -312,3 +313,89 @@ with col7:
 with col8:
     st.metric("Cumulative Economic Loss", f"{filtered['cumulative_loss'].iloc[-1]:,.2f}")
     st.caption("Total cost from unmet demand and overstock under current cost assumptions.")
+
+# -------------------------
+# SYSTEM HEALTH SUMMARY
+# -------------------------
+
+st.markdown("## System Health Summary")
+
+summary_messages = []
+
+# Forecast Quality
+if mape < 0.15:
+    summary_messages.append("Forecast accuracy is strong. Allocation errors are likely policy-driven rather than demand-driven.")
+elif mape < 0.30:
+    summary_messages.append("Forecast accuracy is moderate. Some instability may be demand uncertainty.")
+else:
+    summary_messages.append("High forecast error detected. Demand unpredictability is stressing the allocation policy.")
+
+# Stability
+if cv_allocation < 0.15:
+    summary_messages.append("Allocation policy appears stable over time.")
+elif cv_allocation < 0.30:
+    summary_messages.append("Moderate allocation volatility observed. Policy adjustments may be reactive.")
+else:
+    summary_messages.append("High allocation instability detected. Decision policy may be oscillatory or overreacting.")
+
+# Capital Efficiency
+if capital_efficiency >= 0.98:
+    summary_messages.append("Capital utilization is efficient with minimal oversupply.")
+elif capital_efficiency >= 0.90:
+    summary_messages.append("Some capital inefficiency present due to oversupply.")
+else:
+    summary_messages.append("Significant capital inefficiency detected. System is allocating beyond realized demand.")
+
+# Economic Loss Scale
+if filtered["cumulative_loss"].iloc[-1] > 0:
+    loss_ratio = filtered["cumulative_loss"].iloc[-1] / filtered["Weekly_Sales"].sum()
+    
+    if loss_ratio < 0.05:
+        summary_messages.append("Economic loss remains proportionally low relative to total sales.")
+    elif loss_ratio < 0.15:
+        summary_messages.append("Noticeable economic loss relative to sales volume.")
+    else:
+        summary_messages.append("Severe economic degradation relative to realized demand.")
+
+# Render Summary Box
+with st.container():
+    st.info("\n\n".join(summary_messages))
+
+
+# -------------------------
+# SYSTEM RISK SCORE
+# -------------------------
+
+# Normalize Forecast Risk
+forecast_risk = min(mape / 0.5, 1)  # assuming 50% MAPE is extreme
+
+# Normalize Volatility Risk
+volatility_risk = min(cv_allocation / 0.5, 1)
+
+# Normalize Capital Inefficiency Risk
+capital_risk = min((1 - capital_efficiency) / 0.5, 1)
+
+# Normalize Economic Loss Risk
+loss_ratio = filtered["cumulative_loss"].iloc[-1] / filtered["Weekly_Sales"].sum()
+economic_risk = min(loss_ratio / 0.3, 1)  # 30% loss ratio is severe
+
+# Weighted Composite Risk Score
+risk_score = (
+    0.25 * forecast_risk +
+    0.25 * volatility_risk +
+    0.25 * capital_risk +
+    0.25 * economic_risk
+) * 100
+
+
+
+st.markdown("## System Risk Score")
+
+if risk_score < 30:
+    st.success(f"Low Risk Environment — Score: {risk_score:.1f}/100")
+elif risk_score < 60:
+    st.warning(f"Moderate System Risk — Score: {risk_score:.1f}/100")
+else:
+    st.error(f"High Structural Risk Detected — Score: {risk_score:.1f}/100")
+
+st.caption("Composite risk based on forecast error, allocation volatility, capital inefficiency, and economic loss exposure.")
