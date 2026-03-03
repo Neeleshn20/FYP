@@ -1,7 +1,7 @@
 ,value
-avg_service_level,0.9228272129253599
-total_unmet_demand,516324186.97395706
-total_overstock,563918567.0037009
-mean_weekly_allocation,16094.15605270713
-allocation_volatility,21895.76053687175
-fraction_zero_demand,0.00017316222691367983
+avg_service_level,0.922827213
+total_unmet_demand,516324187
+total_overstock,563918567
+mean_weekly_allocation,16094.15605
+allocation_volatility,21895.76054
+fraction_zero_demand,0.000173162
