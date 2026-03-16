@@ -5,10 +5,18 @@ from core.aggregation_engine import apply_aggregation
 from core.phase1_metrics import compute_phase1
 from core.graph_engine import render_graph
 from core.render_engine import render_metrics_panel
-from failure_modes import signal_delay, demand_drift, holiday_amplification
+from failure_modes.failure_registry import FAILURES
+from core.phase2_report_engine import (
+    render_failure_graph,
+    render_metric_comparison,
+    render_failure_summary,
+    render_risk_escalation,
+    render_loss_composition
+)
 
 st.set_page_config(layout="wide")
-st.title("Decision System Laboratory")
+st.title("Detection and Analysis of Silent Decision Degradation in AI-Assisted Inventory Decision Systems")
+
 
 df = load_data()
 
@@ -82,64 +90,160 @@ with tab1:
     render_metrics_panel(metrics, df_metrics)
     st.write("Metrics computed — identical to original logic.")
 
+# =========================================================
+# TAB 2 — FAILURE INJECTION LABORATORY
+# =========================================================
+
+from failure_modes.failure_registry import FAILURES
+
 with tab2:
 
-    st.header("Failure Injection")
+    st.header("Phase 2 — Failure Injection Laboratory")
 
-    failure = st.selectbox(
-        "Select Failure Mode",
-        ["Signal Delay", "Demand Drift", "Holiday Amplification"]
+    st.markdown(
+        """
+        Inject disturbances into the baseline allocation policy
+        and observe how the system degrades.
+        """
     )
 
-    delay = st.slider("Signal Delay", 1, 8, 2)
-    drift = st.slider("Demand Drift", 0.0, 0.5, 0.1)
-    amp = st.slider("Holiday Amplification", 1.0, 3.0, 1.5)
+    # -----------------------------------------------------
+    # FAILURE SELECTION
+    # -----------------------------------------------------
 
-    # Always start from raw filtered base
+    failure_name = st.selectbox(
+        "Select Failure Mode",
+        list(FAILURES.keys())
+    )
+
+    failure_config = FAILURES[failure_name]
+
+    failure_function = failure_config["function"]
+    param_name = failure_config.get("parameter", None)
+    ui_config = failure_config.get("ui", None)
+
+    param_value = None
+
+    # -----------------------------------------------------
+    # FAILURE PARAMETER CONTROL
+    # -----------------------------------------------------
+
+    if ui_config is not None:
+
+        control_type = ui_config["type"]
+
+        if control_type == "slider":
+
+            param_value = st.slider(
+                ui_config["label"],
+                ui_config["min"],
+                ui_config["max"],
+                ui_config["default"],
+                ui_config.get("step", 0.01)
+            )
+
+        elif control_type == "number_input":
+
+            param_value = st.number_input(
+                ui_config["label"],
+                min_value=ui_config["min"],
+                max_value=ui_config["max"],
+                value=ui_config["default"]
+            )
+
+        elif control_type == "checkbox":
+
+            param_value = st.checkbox(
+                ui_config["label"],
+                value=ui_config["default"]
+            )
+
+        elif control_type == "dropdown":
+
+            param_value = st.selectbox(
+                ui_config["label"],
+                ui_config["options"]
+            )
+
+    else:
+
+        st.info("This failure mode has no adjustable parameters.")
+
+    # -----------------------------------------------------
+    # BASELINE COMPUTATION
+    # -----------------------------------------------------
+
+    baseline_df, baseline_metrics = compute_phase1(
+        filtered_view,
+        margin,
+        holding_cost
+    )
+
+    # -----------------------------------------------------
+    # FAILURE INJECTION
+    # -----------------------------------------------------
+
     temp = filtered_base.copy()
 
-    if failure == "Signal Delay":
-        temp = signal_delay.apply(temp, delay_weeks=delay)
+    if param_name is not None:
 
-    elif failure == "Demand Drift":
-        temp = demand_drift.apply(temp, drift_rate=drift)
+        temp = failure_function(
+            temp,
+            **{param_name: param_value}
+        )
 
-    elif failure == "Holiday Amplification":
-        temp = holiday_amplification.apply(temp, drift_strength=amp)
+    else:
 
-    # Only AFTER injection
+        temp = failure_function(temp)
+
+    # apply aggregation after failure
     temp = apply_aggregation(temp, view_mode)
 
-    df_metrics, metrics = compute_phase1(temp, margin, holding_cost)
+    failure_df, failure_metrics = compute_phase1(
+        temp,
+        margin,
+        holding_cost
+    )
 
-    render_graph(
-        st,
-        df_metrics,
+    # -----------------------------------------------------
+    # SYSTEM BEHAVIOR GRAPH
+    # -----------------------------------------------------
+
+    st.markdown("## Baseline vs Failure Behaviour")
+
+    render_failure_graph(
+        baseline_df,
+        failure_df,
         show_actual,
         show_expected,
         show_allocated,
         show_loss,
         show_service
     )
-    baseline_df, baseline_metrics = compute_phase1(
-        filtered_view, margin, holding_cost
-    )
-
-    failure_df, failure_metrics = compute_phase1(
-        temp, margin, holding_cost
-    )
-
-    from core.phase2_report_engine import (
-        render_phase2_comparison,
-        render_failure_insights
-    )
-
-    comparison_df = render_phase2_comparison(
+    st.markdown("## Risk Escalation")
+    render_risk_escalation(
         baseline_metrics,
         failure_metrics
     )
+    # -----------------------------------------------------
+    # METRIC COMPARISON
+    # -----------------------------------------------------
 
-    render_failure_insights(
+    render_metric_comparison(
+        baseline_metrics,
+        failure_metrics
+    )
+    st.markdown("## Economic Loss Composition")
+
+    render_loss_composition(
+        baseline_df,
+        failure_df
+    )
+    # -----------------------------------------------------
+    # FAILURE INTERPRETATION
+    # -----------------------------------------------------
+
+    render_failure_summary(
         baseline_metrics,
         failure_metrics
     )
