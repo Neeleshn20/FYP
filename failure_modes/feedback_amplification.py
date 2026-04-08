@@ -1,3 +1,5 @@
+from failure_modes.utils import recompute_supply_metrics
+
 def apply(df, feedback_strength=0.4):
 
     df_new = df.copy()
@@ -10,9 +12,8 @@ def apply(df, feedback_strength=0.4):
         .fillna(0)
     )
 
-    df_new["allocated_inventory"] = (
-        df_new["allocated_inventory"] +
+    df_new["allocated_inventory"] += (
         feedback_strength * df_new["prev_unmet"]
     )
 
-    return df_new
+    return recompute_supply_metrics(df_new)

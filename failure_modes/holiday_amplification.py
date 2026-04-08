@@ -1,19 +1,16 @@
 import numpy as np
-np.random.seed(42)
+from failure_modes.utils import recompute_supply_metrics
+
 def apply(df, drift_strength=0.3):
 
-    df_h = df.copy()
+    df_new = df.copy()
 
-    noise = np.random.normal(
-        0,
-        drift_strength,
-        size=len(df_h)
-    )
+    noise = np.random.normal(0, drift_strength, len(df_new))
 
-    holiday_mask = df_h["IsHoliday"] == True
+    mask = df_new["IsHoliday"]
 
-    df_h.loc[holiday_mask, "expected_demand"] *= (
-        1 + noise[holiday_mask]
-    )
+    df_new.loc[mask, "expected_demand"] *= (1 + noise[mask])
 
-    return df_h
+    df_new["allocated_inventory"] = df_new["expected_demand"]
+
+    return recompute_supply_metrics(df_new)
